@@ -1,6 +1,8 @@
 use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 
+use crate::in_memory::{AppState, Subscription};
+
 
 #[derive(Deserialize,Serialize)]
 pub struct SubscriptionRequest {
@@ -18,7 +20,7 @@ impl SubscriptionRequest {
 
 
 
-pub async fn subscribe(info: web::Json<SubscriptionRequest>,) -> HttpResponse {
+pub async fn subscribe(info: web::Json<SubscriptionRequest>, app_state: web::Data<AppState>) -> HttpResponse {
     println!("{}",info.username);
     println!("{}",info.email);
     if info.username == ""{
@@ -28,5 +30,17 @@ pub async fn subscribe(info: web::Json<SubscriptionRequest>,) -> HttpResponse {
         return HttpResponse::BadRequest().body("email is missing")
     }
 
-    HttpResponse::Ok().finish()
+    let mut subscriptions = app_state.subscriptions.write().expect("RwLock poisoned");
+    let id = app_state.get_id();
+    let subscription = Subscription{
+        id: id,
+        username: info.username.to_string(),
+        email: info.email.to_string(),
+    };
+
+    subscriptions.push(subscription);
+
+    HttpResponse::Ok().json(id)
+    //HttpResponse::Ok().finish()
 }
+
