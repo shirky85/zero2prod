@@ -1,0 +1,5 @@
+server_port: 8000
+author: Shir The Developer
+specific_properties:
+  first: test1
+  second: test2
