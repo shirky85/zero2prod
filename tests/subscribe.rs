@@ -43,6 +43,9 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
         (SubscriptionRequest::new("le guin".to_string(), "".to_string()), "missing the email"),
         (SubscriptionRequest::new("".to_string(), "ursula_le_guin@gmail.com".to_string()), "missing the name"),
         (SubscriptionRequest::new("".to_string(), "".to_string()), "missing both name and email"),
+       // (SubscriptionRequest::new("Boo".to_string(), "my-gosh-not-an-email".to_string()), "invalid email"),
+        (SubscriptionRequest::new("G".to_string(), "g@mail.com".to_string()), "too short of a name"),
+        (SubscriptionRequest::new("the%estna^^e".to_string(), "mine@yahoo.com".to_string()), "invalid name"),
     ];
     for (invalid_body, error_message) in test_cases {
         // Act
