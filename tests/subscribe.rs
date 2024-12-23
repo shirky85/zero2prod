@@ -1,62 +1,35 @@
-use std::net::TcpListener;
-use actix_web::web;
 use zero2prod::routes::SubscriptionRequest;
 mod common;
 use common::spawn_app;
+use wiremock::matchers::{any, method};
+use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
-    // Arrange
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed binding to port");
-    let app_address = format!(
-        "http://127.0.0.1:{}",
-        listener.local_addr().unwrap().port().to_string()
-    );
-    spawn_app(listener);
-    let client = reqwest::Client::new();
-    // Act
-    let request = web::Json(
-        SubscriptionRequest::new("le guin".to_string(), "ursula_le_guin@gmail.com".to_string()));
-    let json_payload = serde_json::to_string(&request).unwrap();
-    let response = client
-        .post(&format!("{}/subscriptions", &app_address))
-        .header("Content-Type", "application/json")
-        .body(json_payload)
-        .send()
-        .await
-        .expect("Failed to execute request.");
+    let test_app = spawn_app().await;
+    let response = test_app.post_subscriptions(
+        SubscriptionRequest::new("le guin".to_string(), 
+        "ursula_le_guin@gmail.com".to_string())).await;
+
     // Assert
     assert_eq!(200, response.status().as_u16());
     assert_eq!(1.to_string(), response.text().await.unwrap())
 }
 #[tokio::test]
 async fn subscribe_returns_a_400_when_data_is_missing() {
-    // Arrange
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed binding to port");
-    let app_address = format!(
-        "http://127.0.0.1:{}",
-        listener.local_addr().unwrap().port().to_string()
-    );
-    spawn_app(listener);
-    let client = reqwest::Client::new();
+    let test_app = spawn_app().await;
     let test_cases = vec![
         (SubscriptionRequest::new("le guin".to_string(), "".to_string()), "missing the email"),
         (SubscriptionRequest::new("".to_string(), "ursula_le_guin@gmail.com".to_string()), "missing the name"),
         (SubscriptionRequest::new("".to_string(), "".to_string()), "missing both name and email"),
-       // (SubscriptionRequest::new("Boo".to_string(), "my-gosh-not-an-email".to_string()), "invalid email"),
+        (SubscriptionRequest::new("Boo".to_string(), "my-gosh-not-an-email".to_string()), "invalid email"),
         (SubscriptionRequest::new("G".to_string(), "g@mail.com".to_string()), "too short of a name"),
         (SubscriptionRequest::new("the%estna^^e".to_string(), "mine@yahoo.com".to_string()), "invalid name"),
     ];
     for (invalid_body, error_message) in test_cases {
         // Act
-        let request = web::Json(invalid_body);
-        let response = client
-            .post(&format!("{}/subscriptions", &app_address))
-            .header("Content-Type", "application/json")
-            .body(serde_json::to_string(&request).unwrap())
-            .send()
-            .await
-            .expect("Failed to execute request.");
+        
+        let response = test_app.post_subscriptions(invalid_body).await;
         // Assert
         assert_eq!(
             400,
@@ -66,4 +39,25 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
             error_message
         );
     }
+}
+
+
+#[tokio::test]
+async fn subscribe_sends_a_confirmation_email_for_valid_data() {
+    // Arrange
+    let test_app = spawn_app().await;
+    
+    Mock::given(any())
+    .and(method("POST"))
+    .respond_with(ResponseTemplate::new(200))
+    .expect(1)
+    .mount(&test_app.mock_email_server)
+    .await;
+
+    // Act
+    let _response = test_app.post_subscriptions(SubscriptionRequest::new("le guin".to_string(), "ursula_le_guin@gmail.com".to_string()));
+
+  
+    // Assert
+    // Mock asserts on drop
 }

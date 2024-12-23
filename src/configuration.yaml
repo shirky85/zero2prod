@@ -4,5 +4,5 @@ specific_properties:
   first: test1
   second: test2
 email_client:
-  base_url: "https://api.mailjet.com/v3/send"
+  base_url: "https://api.mailjet.com"
   sender: "shirans@eyenet-mobile.com"

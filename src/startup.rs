@@ -3,7 +3,7 @@ use actix_web::{
     dev::Server, web::{self, Data}, App, HttpServer 
 };
 use tracing_actix_web::TracingLogger;
-use crate::email_client::{self, EmailClient};
+use crate::email_client::EmailClient;
 use crate::{in_memory::AppState, routes::{greet, health_check, subscribe}};
 
 pub fn run(listener: TcpListener, 
