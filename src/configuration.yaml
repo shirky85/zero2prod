@@ -3,3 +3,6 @@ author: Shir The Developer
 specific_properties:
   first: test1
   second: test2
+email_client:
+  base_url: "https://api.mailjet.com/v3/send"
+  sender: "shirans@eyenet-mobile.com"

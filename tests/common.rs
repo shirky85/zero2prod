@@ -1,8 +1,9 @@
 use std::net::TcpListener;
-use zero2prod::in_memory::AppState;
+use zero2prod::{email_client::EmailClient, in_memory::AppState};
 use actix_web::web;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 use std::sync::LazyLock;
+use zero2prod::configuration::get_configuration;
 /// The closure passed to LazyLock::new is executed only once, when TRACING is first accessed.
 /// This ensures that the tracing stack is initialized only once.
 /// It is is thread-safe, meaning it can be safely accessed from multiple threads without 
@@ -32,12 +33,15 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
 });
 
 pub fn spawn_app(listener: TcpListener) {
+    let configuration = get_configuration()
+        .expect("Failed to read configuration.");
     // This line forces the initialization of the TRACING variable if it has not already been initialized.
     // If we call it again later on in the code - it will do nothing.
     LazyLock::force(&TRACING);
     let app_state: AppState = AppState::new();
     let data_store_shared = web::Data::new(app_state);
-    let server = zero2prod::startup::run(listener, data_store_shared).expect("Failed to bind address");
+    let email_client = EmailClient::new(configuration.email_client.base_url, configuration.email_client.sender);
+    let server = zero2prod::startup::run(listener, data_store_shared, email_client).expect("Failed to bind address");
     // Launch the server as a background task
     // tokio::spawn returns a handle to the spawned future,
     // but we have no use for it here, hence the non-binding let
