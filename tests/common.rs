@@ -1,5 +1,6 @@
 use std::net::TcpListener;
-use zero2prod::{email_client::EmailClient, in_memory::AppState};
+use zero2prod::{email_client::EmailClient, in_memory::AppState, routes::SubscriptionRequest};
+use wiremock::MockServer;
 use actix_web::web;
 use zero2prod::telemetry::{get_subscriber, init_subscriber};
 use std::sync::LazyLock;
@@ -32,9 +33,41 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
     };
 });
 
-pub fn spawn_app(listener: TcpListener) {
-    let configuration = get_configuration()
-        .expect("Failed to read configuration.");
+pub struct TestApp{
+    pub address: String,
+    pub mock_email_server: MockServer,
+}
+
+impl TestApp {
+    pub async fn post_subscriptions(&self, body: SubscriptionRequest) -> reqwest::Response {
+        let request = web::Json(body);
+        let json_payload = serde_json::to_string(&request).unwrap();
+        reqwest::Client::new()
+            .post(&format!("{}/subscriptions", &self.address))
+            .header("Content-Type", "application/json")
+            .body(json_payload)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+}
+
+pub async fn spawn_app() -> TestApp {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed binding to port");
+    let app_address = format!(
+        "http://127.0.0.1:{}",
+        listener.local_addr().unwrap().port().to_string()
+    );
+
+    // Launch a mock server to stand in for Postmark's API
+    let email_server = MockServer::start().await;
+    let configuration = {
+        let mut c = get_configuration().expect("Failed to read configuration.");
+        // [...]
+        // Use the mock server as email API
+        c.email_client.base_url = email_server.uri();
+        c
+        };
     // This line forces the initialization of the TRACING variable if it has not already been initialized.
     // If we call it again later on in the code - it will do nothing.
     LazyLock::force(&TRACING);
@@ -42,8 +75,14 @@ pub fn spawn_app(listener: TcpListener) {
     let data_store_shared = web::Data::new(app_state);
     let email_client = EmailClient::new(configuration.email_client.base_url, configuration.email_client.sender);
     let server = zero2prod::startup::run(listener, data_store_shared, email_client).expect("Failed to bind address");
+
     // Launch the server as a background task
     // tokio::spawn returns a handle to the spawned future,
     // but we have no use for it here, hence the non-binding let
     let _ = tokio::spawn(server);
+
+    TestApp { 
+        address: app_address,
+        mock_email_server: email_server,
+     }
 }
