@@ -1,8 +1,9 @@
 
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 pub struct Properties {
     pub server_port: u16,
+    pub server_host: String,
     pub author: String,
     pub specific_properties: SomeProperties,
     pub email_client: EmailClientProperties,
@@ -20,12 +21,6 @@ pub struct EmailClientProperties{
     pub sender: String,
 }
 
-// impl EmailClientProperties {
-//     pub fn sender(&self) -> String {
-//         self.sender.clone()
-//     }
-    
-// }
 
 pub fn get_configuration() -> Result<Properties, config::ConfigError> {
 
