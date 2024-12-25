@@ -3,7 +3,7 @@ use wiremock::{ResponseTemplate, Mock};
 use wiremock::matchers::{path, method};
 use zero2prod::routes::SubscriptionRequest;
 
-use crate::common::spawn_app;
+use crate::common::{get_id_from_response, spawn_app};
 
 #[tokio::test]
 async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
@@ -16,7 +16,12 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
         .expect(1)
         .mount(&app.mock_email_server)
         .await;
-    app.post_subscriptions(request_body).await;
+    
+    let response = app.post_subscriptions(request_body).await;
+    let response_body = response.text().await.unwrap();
+    
+    let subscription_id = get_id_from_response(response_body);
+
     let email_request = &app.mock_email_server.received_requests().await.unwrap()[0];
     let body: serde_json::Value = serde_json::from_slice(&email_request.body)
     .unwrap();
@@ -40,6 +45,11 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
         .unwrap();
     // Assert
     assert_eq!(response.status().as_u16(), 200);
+
+    let subscriptions_data = app.get_subscription(&subscription_id).await.text().await.unwrap();
+    let subscriptions_data_json: serde_json::Value = serde_json::from_str(&subscriptions_data).unwrap();
+    let subscription_status = subscriptions_data_json["status"].as_str().unwrap();
+    assert_eq!(subscription_status, "confirmed");
 }
 
 

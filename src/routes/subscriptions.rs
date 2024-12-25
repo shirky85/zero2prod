@@ -84,7 +84,7 @@ pub async fn subscribe(
         return HttpResponse::InternalServerError().finish();
     }
 
-    HttpResponse::Ok().json(id)
+    HttpResponse::Ok().json(serde_json::json!({ "id": id }))
 }
 
 #[derive(serde::Deserialize)]
@@ -96,11 +96,10 @@ pub async fn get_subscription(
     app_state: web::Data<AppState>,
     id: web::Query<SubscriptionParameters>
 ) -> HttpResponse {
-    HttpResponse::Ok().json(Subscription{
-        id: 2,
-        username: "something".to_string(),
-        email: "something@gmail.com".to_string(),
-        status: "registered".to_string(),
-    })
+    let subscriptions = app_state.subscriptions.read().expect("RwLock poisoned");
+    if let Some(subscription) = subscriptions.iter().find(|&s| s.id.to_string() == id.subscription_id) {
+        return HttpResponse::Ok().json(subscription);
+    }
+    return HttpResponse::NotFound().finish();
 }
 

@@ -1,10 +1,12 @@
+use serde_json::Value;
 use zero2prod::in_memory::AppState;
 use zero2prod::routes::SubscriptionRequest;
 use common::spawn_app;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::common;
+use crate::common::get_id_from_response;
+use crate::{common, subscriptions_confirm};
 
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
@@ -22,8 +24,14 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
     // Assert
     assert_eq!(200, response.status().as_u16());
-    assert_eq!(1.to_string(), response.text().await.unwrap());
     
+    let response_body = response.text().await.unwrap();
+
+    // Extract the "id" field
+    let subscription_id = get_id_from_response(response_body);
+    assert_eq!("1", subscription_id);
+
+    assert!(!subscription_id.is_empty());
 }
 #[tokio::test]
 async fn subscribe_returns_a_400_when_data_is_missing() {

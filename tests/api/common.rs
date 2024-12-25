@@ -1,3 +1,4 @@
+use serde_json::Value;
 use zero2prod::routes::SubscriptionRequest;
 use zero2prod::startup::Application;
 use wiremock::MockServer;
@@ -52,6 +53,15 @@ impl TestApp {
             .await
             .expect("Failed to execute request.")
     }
+
+    pub async fn get_subscription(&self, subscription_id: &str) -> reqwest::Response {
+        reqwest::Client::new()
+            .get(&format!("{}/subscriptions/find?subscription_id={}", &self.address, subscription_id))
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
 }
 
 pub async fn spawn_app() -> TestApp {
@@ -85,4 +95,13 @@ pub async fn spawn_app() -> TestApp {
         mock_email_server: email_server,
         port: port,
      }
+}
+
+pub fn get_id_from_response(response_body: String) -> String{
+    let json: Value = serde_json::from_str(&response_body).unwrap();
+
+    // Extract the "id" field
+    json["id"].as_u64()
+                                .map(|id| id.to_string())
+                                .unwrap_or_else(|| "".to_string())
 }
