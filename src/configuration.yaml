@@ -1,6 +1,7 @@
 server_port: 8000
 server_host: "127.0.0.1"
 author: Shir The Developer
+base_url: "http://127.0.0.1"
 specific_properties:
   first: test1
   second: test2

@@ -7,6 +7,7 @@ pub struct Properties {
     pub author: String,
     pub specific_properties: SomeProperties,
     pub email_client: EmailClientProperties,
+    pub base_url: String,
 }
 
 #[derive(serde::Deserialize, Clone)]

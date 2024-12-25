@@ -3,7 +3,7 @@ use actix_web::{
     dev::Server, web::{self, Data}, App, HttpServer 
 };
 use tracing_actix_web::TracingLogger;
-use crate::{email_client::EmailClient, routes::subscription_confirm};
+use crate::{email_client::EmailClient, routes::{get_subscription, subscription_confirm}};
 use crate::configuration::Properties;
 use crate::{in_memory::AppState, routes::{greet, health_check, subscribe}};
 
@@ -34,7 +34,7 @@ impl Application {
         );
         let listener = TcpListener::bind(address)?;
         let port = listener.local_addr().unwrap().port();
-        let server = run(listener, data_store_shared, email_client)?;
+        let server = run(listener, data_store_shared, email_client, configuration.base_url)?;
         // We "save" the bound port in one of `Application`'s fields
         Ok(Self { port, server })
     }
@@ -50,36 +50,24 @@ impl Application {
     }
 }
 
-// pub async fn build(configuration: Properties) -> Result<Server, std::io::Error> {
-//     let app_state: AppState = AppState::new();
-//     let data_store_shared = web::Data::new(app_state);
-//     let sender_email = configuration
-//         .email_client
-//         .sender;
-//     let email_client = EmailClient::new(
-//         configuration.email_client.base_url,
-//         sender_email,
-//     );
-//     let address = format!(
-//     "{}:{}",
-//     configuration.server_host, configuration.server_port
-//     );
-//     let listener = TcpListener::bind(address)?;
-//     run(listener, data_store_shared, email_client)
-// }
+pub struct ApplicationBaseUrl(pub String);
 
 pub fn run(listener: TcpListener, 
     app_state:web::Data<AppState>,
-    email_client: EmailClient) -> Result<Server, std::io::Error> {
+    email_client: EmailClient,
+    base_url_str: String) -> Result<Server, std::io::Error> {
     let email_client = Data::new(email_client);
+    let base_url = Data::new(ApplicationBaseUrl(base_url_str));
     let server = HttpServer::new(move|| {
         App::new()
             .wrap(TracingLogger::default())
             .app_data(app_state.clone())
             .app_data(email_client.clone()) // each app will get a shared reference to same client (to use the same connection pool created by reqwest under the hood)
+            .app_data(base_url.clone())
             .route("/health_check", web::get().to(health_check))
             .route("/", web::get().to(greet))
             .route("/{name}", web::get().to(greet))
+            .route("/subscriptions/find",web::get().to(get_subscription))
             .route("/subscriptions", web::post().to(subscribe))
             .route("/subscriptions/confirm", web::get().to(subscription_confirm))
             

@@ -37,6 +37,7 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
 pub struct TestApp{
     pub address: String,
     pub mock_email_server: MockServer,
+    pub port: u16,
 }
 
 impl TestApp {
@@ -75,11 +76,13 @@ pub async fn spawn_app() -> TestApp {
     let application = Application::build(configuration.clone())
         .await
         .expect("Failed to build application.");
-    let address = format!("http://127.0.0.1:{}", application.port());
+    let port = application.port();
+    let address = format!("http://127.0.0.1:{}", port);
     let _ = tokio::spawn(application.run_until_stopped());
 
     TestApp { 
         address: address,
         mock_email_server: email_server,
+        port: port,
      }
 }

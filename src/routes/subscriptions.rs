@@ -5,7 +5,7 @@ use validator::Validate;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::{email_client::EmailClient, in_memory::{AppState, Subscription}};
+use crate::{email_client::EmailClient, in_memory::{AppState, Subscription}, startup::ApplicationBaseUrl};
 
 static NAME_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[\sa-zA-Z0-9_]+$").unwrap()
@@ -24,9 +24,10 @@ pub struct SubscriptionRequest {
 async fn send_confirmation_email(
     email_client: &EmailClient, 
     recepient: String,
-    subscription_id: i32) 
+    subscription_id: i32,
+    base_url: &String) 
     -> Result<(), reqwest::Error> {
-    let confirmation_link = format!("https://myapp.com/subscriptions/confirm?subscription_token={}", subscription_id);
+    let confirmation_link = format!("{}/subscriptions/confirm?subscription_token={}", base_url, subscription_id);
     email_client
         .send_email(
             recepient,
@@ -49,7 +50,7 @@ impl SubscriptionRequest {
 
 #[tracing::instrument(
     name = "Adding a new subscriber",
-    skip(info, app_state, email_client),
+    skip(info, app_state, email_client, base_url),
     fields(
     %info.email,
     %info.username
@@ -59,6 +60,7 @@ pub async fn subscribe(
     info: web::Json<SubscriptionRequest>, 
     app_state: web::Data<AppState>,
     email_client: web::Data<EmailClient>,
+    base_url: web::Data<ApplicationBaseUrl>,
 ) -> HttpResponse {
     match info.validate() {
         Ok(_) => println!("Request for subscribe passed validation"),
@@ -75,7 +77,7 @@ pub async fn subscribe(
 
     subscriptions.push(subscription);
 
-    if send_confirmation_email(&email_client, info.email.clone(), id)
+    if send_confirmation_email(&email_client, info.email.clone(), id, &base_url.0)
         .await
         .is_err()
     {
@@ -83,5 +85,22 @@ pub async fn subscribe(
     }
 
     HttpResponse::Ok().json(id)
+}
+
+#[derive(serde::Deserialize)]
+pub struct SubscriptionParameters {
+    subscription_id: String
+}
+
+pub async fn get_subscription(
+    app_state: web::Data<AppState>,
+    id: web::Query<SubscriptionParameters>
+) -> HttpResponse {
+    HttpResponse::Ok().json(Subscription{
+        id: 2,
+        username: "something".to_string(),
+        email: "something@gmail.com".to_string(),
+        status: "registered".to_string(),
+    })
 }
 
