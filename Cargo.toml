@@ -47,3 +47,4 @@ tokio = { version = "1", features = ["rt", "macros"] }
 wiremock = "0.6.2"
 fake = "3.0.1"
 claims = "0.8.0"
+linkify = "0.10.0"

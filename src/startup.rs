@@ -3,7 +3,7 @@ use actix_web::{
     dev::Server, web::{self, Data}, App, HttpServer 
 };
 use tracing_actix_web::TracingLogger;
-use crate::email_client::EmailClient;
+use crate::{email_client::EmailClient, routes::subscription_confirm};
 use crate::configuration::Properties;
 use crate::{in_memory::AppState, routes::{greet, health_check, subscribe}};
 
@@ -81,6 +81,8 @@ pub fn run(listener: TcpListener,
             .route("/", web::get().to(greet))
             .route("/{name}", web::get().to(greet))
             .route("/subscriptions", web::post().to(subscribe))
+            .route("/subscriptions/confirm", web::get().to(subscription_confirm))
+            
             
     })
     .listen(listener)?

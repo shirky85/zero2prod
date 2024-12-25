@@ -1,8 +1,9 @@
 use zero2prod::routes::SubscriptionRequest;
-mod common;
 use common::spawn_app;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
+
+use crate::common;
 
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
@@ -49,22 +50,17 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
 }
 #[tokio::test]
 async fn subscribe_sends_a_confirmation_email_for_valid_data() {
-    // Arrange
-    let test_app = spawn_app().await;
+
+    let app = spawn_app().await;
     let request_body = SubscriptionRequest::new("le guin".to_string(), "ursula_le_guin@gmail.com".to_string());
-    
     Mock::given(path("/v3/send"))
         .and(method("POST"))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
-        .mount(&test_app.mock_email_server)
+        .mount(&app.mock_email_server)
         .await;
+    app.post_subscriptions(request_body).await;
 
-    // Act
-    let _response = test_app.post_subscriptions(request_body);
-
-  
-    // Assert
     // Mock asserts on drop
 }
 

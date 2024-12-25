@@ -7,7 +7,7 @@ pub struct Subscription{
     pub id: i32,
     pub username: String,
     pub email: String,
-
+    pub status: String
 }
 
 #[derive(Clone)]

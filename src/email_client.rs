@@ -3,13 +3,18 @@ use validator::Validate;
 use reqwest::{Client, Url};
 
 #[derive(Serialize)]
-#[serde(rename_all = "PascalCase")]
 struct MailjetRequest<'a> {
+    #[serde(rename = "FromEmail")]
     pub from_email: &'a str,
+    #[serde(rename = "FromName")]
     pub from_name: &'a str,
+    #[serde(rename = "Subject")]
     pub subject: &'a str,
+    #[serde(rename = "Text-part")]
     pub text_part: &'a str,
+    #[serde(rename = "Html-part")]
     pub html_part: &'a str,
+    #[serde(rename = "Recipients")]
     pub recipients: Vec<Recipient>,
 }
 
@@ -45,6 +50,7 @@ impl EmailClient {
         name = "Sending an email",
         skip(self, html_content, text_content),
         fields(
+        %html_content,
         %recipient,
         %subject
         )
