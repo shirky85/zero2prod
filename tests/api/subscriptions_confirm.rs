@@ -17,7 +17,7 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
         .mount(&app.mock_email_server)
         .await;
     
-    let response = app.post_subscriptions(request_body).await;
+    let response = app.post_subscriptions(&request_body).await;
     let response_body = response.text().await.unwrap();
     
     let subscription_id = get_id_from_response(response_body);

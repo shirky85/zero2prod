@@ -42,7 +42,7 @@ pub struct TestApp{
 }
 
 impl TestApp {
-    pub async fn post_subscriptions(&self, body: SubscriptionRequest) -> reqwest::Response {
+    pub async fn post_subscriptions(&self, body: &SubscriptionRequest) -> reqwest::Response {
         let request = web::Json(body);
         let json_payload = serde_json::to_string(&request).unwrap();
         reqwest::Client::new()

@@ -1,3 +1,4 @@
+use reqwest::Url;
 use serde_json::Value;
 use zero2prod::in_memory::AppState;
 use zero2prod::routes::SubscriptionRequest;
@@ -19,7 +20,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
         .await;
 
     let response = test_app.post_subscriptions(
-        SubscriptionRequest::new("le guin".to_string(), 
+        &SubscriptionRequest::new("le guin".to_string(), 
         "ursula_le_guin@gmail.com".to_string())).await;
 
     // Assert
@@ -47,7 +48,7 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
     for (invalid_body, error_message) in test_cases {
         // Act
         
-        let response = test_app.post_subscriptions(invalid_body).await;
+        let response = test_app.post_subscriptions(&invalid_body).await;
         // Assert
         assert_eq!(
             400,
@@ -69,8 +70,74 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
         .expect(1)
         .mount(&app.mock_email_server)
         .await;
-    app.post_subscriptions(request_body).await;
+    app.post_subscriptions(&request_body).await;
 
     // Mock asserts on drop
 }
 
+#[tokio::test]
+async fn double_subscribe_does_not_create_a_new_subscription(){
+    let app = spawn_app().await;
+    let request_body = SubscriptionRequest::new("le guin".to_string(), "ursula_le_guin@gmail.com".to_string());
+    Mock::given(path("/v3/send"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(2)
+        .mount(&app.mock_email_server)
+        .await;
+    let response = app.post_subscriptions(&request_body).await;
+
+    let response_body = response.text().await.unwrap();
+    
+    let first_subscription_id = get_id_from_response(response_body);
+    
+    // second request with same email
+    let response = app.post_subscriptions(&request_body).await;
+    let response_body = response.text().await.unwrap();
+    
+    let second_subscription_id = get_id_from_response(response_body);
+    assert_eq!(first_subscription_id,second_subscription_id)
+
+}
+
+#[tokio::test]
+async fn second_subscribe_after_confirmation_returns_bad_request(){
+    let app = spawn_app().await;
+    let request_body = SubscriptionRequest::new("le guin".to_string(), "ursula_le_guin@gmail.com".to_string());
+    Mock::given(path("/v3/send"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.mock_email_server)
+        .await;
+    let response = app.post_subscriptions(&request_body).await;
+
+    let response_body = response.text().await.unwrap();
+    
+    let first_subscription_id = get_id_from_response(response_body);
+    
+    let email_request = &app.mock_email_server.received_requests().await.unwrap()[0];
+    let body: serde_json::Value = serde_json::from_slice(&email_request.body)
+    .unwrap();
+    // Extract the link from one of the request fields.
+    let get_link = |s: &str| {
+        let links: Vec<_> = linkify::LinkFinder::new()
+        .links(s)
+        .filter(|l| *l.kind() == linkify::LinkKind::Url)
+        .collect();
+        assert_eq!(links.len(), 1);
+        links[0].as_str().to_owned()
+    };
+    let raw_confirmation_link = &get_link(&body["Html-part"].as_str().unwrap());
+    let mut confirmation_link = Url::parse(raw_confirmation_link).unwrap();
+    // Let's make sure we don't call random APIs on the web
+    assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
+    confirmation_link.set_port(Some(app.port)).unwrap();
+    // Act - we make the actual request to the confirm endpoint
+    let response = reqwest::get(confirmation_link)
+        .await
+        .unwrap();
+    // second request with same email
+    let response = app.post_subscriptions(&request_body).await;
+    assert_eq!(response.status().as_u16(), 400);
+}

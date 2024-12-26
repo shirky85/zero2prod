@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use validator::Validate;
 
 use once_cell::sync::Lazy;
@@ -67,24 +68,36 @@ pub async fn subscribe(
         Err(errors) => {return HttpResponse::BadRequest().body(errors.to_string());}
     }
     let mut subscriptions = app_state.subscriptions.write().expect("RwLock poisoned");
-    let id = app_state.get_id();
-    let subscription = Subscription{
-        id: id,
-        username: info.username.to_string(),
-        email: info.email.to_string(),
-        status: "pending_confirmation".to_string(),
-    };
+    let email = &info.email;
+    // Find the subscription with the matching token
+    let mut new_id: Option<i32> = None;
+    if let Some(subscription) = subscriptions.iter_mut().find(|s| s.email == *email) {
+        // Subscription already exists
+        match subscription.status.as_str() {
+            "confirmed" => {return HttpResponse::BadRequest().json(serde_json::json!({ "message": "Subscription with email {} is already confirmed" }));},
+            _ =>  {new_id = Some(subscription.id)}, // If email not confirmed resend the confimation link
+        }
+    } else {
+        let id = app_state.get_id();
+        new_id = Some(id);
+        let subscription = Subscription{
+            id: id,
+            username: info.username.to_string(),
+            email: info.email.to_string(),
+            status: "pending_confirmation".to_string(),
+        };
+    
+        subscriptions.push(subscription);
+    }
 
-    subscriptions.push(subscription);
-
-    if send_confirmation_email(&email_client, info.email.clone(), id, &base_url.0)
+    if send_confirmation_email(&email_client, info.email.clone(), new_id.unwrap(), &base_url.0)
         .await
         .is_err()
     {
         return HttpResponse::InternalServerError().finish();
     }
 
-    HttpResponse::Ok().json(serde_json::json!({ "id": id }))
+    HttpResponse::Ok().json(serde_json::json!({ "id": new_id.unwrap() }))
 }
 
 #[derive(serde::Deserialize)]
