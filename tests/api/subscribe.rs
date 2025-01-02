@@ -1,13 +1,10 @@
 use reqwest::Url;
-use serde_json::Value;
-use zero2prod::in_memory::AppState;
 use zero2prod::routes::SubscriptionRequest;
-use common::spawn_app;
+use crate::common::spawn_app;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::common::get_id_from_response;
-use crate::{common, subscriptions_confirm};
 
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
@@ -114,7 +111,7 @@ async fn second_subscribe_after_confirmation_returns_bad_request(){
 
     let response_body = response.text().await.unwrap();
     
-    let first_subscription_id = get_id_from_response(response_body);
+    let _first_subscription_id = get_id_from_response(response_body);
     
     let email_request = &app.mock_email_server.received_requests().await.unwrap()[0];
     let body: serde_json::Value = serde_json::from_slice(&email_request.body)
@@ -134,10 +131,29 @@ async fn second_subscribe_after_confirmation_returns_bad_request(){
     assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
     confirmation_link.set_port(Some(app.port)).unwrap();
     // Act - we make the actual request to the confirm endpoint
-    let response = reqwest::get(confirmation_link)
+    let _response = reqwest::get(confirmation_link)
         .await
         .unwrap();
     // second request with same email
     let response = app.post_subscriptions(&request_body).await;
     assert_eq!(response.status().as_u16(), 400);
+}
+
+
+#[tokio::test]
+async fn confirmations_that_fails_on_sending_email_will_provide_data_to_user() {
+    // Arrange
+    let app = spawn_app().await;
+    let request_body = SubscriptionRequest::new("le guin".to_string(), "ursula_le_guin@gmail.com".to_string());
+    Mock::given(path("/v3/send"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(1)
+        .mount(&app.mock_email_server)
+        .await;
+    
+    let response = app.post_subscriptions(&request_body).await;
+    //let response_body = response.text().await.unwrap();
+    // Assert
+    assert_eq!(response.status().as_u16(), 502);
 }

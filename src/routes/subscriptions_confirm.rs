@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::in_memory::AppState;
-use tracing::instrument;
 
 #[derive(Deserialize,Serialize,Debug)]
 pub struct Parameters {

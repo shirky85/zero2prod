@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpResponse, ResponseError};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use validator::Validate;
@@ -11,6 +11,68 @@ use crate::{email_client::EmailClient, in_memory::{AppState, Subscription}, star
 static NAME_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[\sa-zA-Z0-9_]+$").unwrap()
 });
+
+#[derive(Debug)]
+pub enum SubscriptionError {
+    ValidationError(String),
+    AlreadyExists(serde_json::Value),
+    SendEmailError(reqwest::Error),
+}
+
+impl From<validator::ValidationErrors> for SubscriptionError {
+    fn from(err: validator::ValidationErrors) -> Self {
+        Self::ValidationError(err.to_string())
+    }
+    
+}
+
+impl From<reqwest::Error> for SubscriptionError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::SendEmailError(err)
+    }
+    
+}
+
+impl From<serde_json::Value> for SubscriptionError {
+    fn from(err: serde_json::Value) -> Self {
+        Self::AlreadyExists(err)
+    }
+    
+}
+
+
+
+impl std::fmt::Display for SubscriptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SubscriptionError::ValidationError(errors) => {
+                write!(f, "Validation error(s): {}", errors)
+            }
+            SubscriptionError::AlreadyExists(message) => {
+                write!(f, "Subscription already exists: {}", message)
+            }
+            SubscriptionError::SendEmailError(_error) => {
+                write!(f, "Failed to send email")
+            }
+        }
+    }
+}
+
+impl ResponseError for SubscriptionError {
+    fn error_response(&self) -> HttpResponse {
+        match self {
+            SubscriptionError::ValidationError(errors) => {
+                HttpResponse::BadRequest().json(json!({ "message": errors }))
+            }
+            SubscriptionError::AlreadyExists(message) => {
+                HttpResponse::BadRequest().json(message)
+            }
+            SubscriptionError::SendEmailError(_err) => {
+                HttpResponse::BadGateway().finish()
+            }
+        }
+    }
+}
 
 
 #[derive(Deserialize,Serialize,Validate)]
@@ -62,10 +124,10 @@ pub async fn subscribe(
     app_state: web::Data<AppState>,
     email_client: web::Data<EmailClient>,
     base_url: web::Data<ApplicationBaseUrl>,
-) -> HttpResponse {
+) -> Result<HttpResponse, SubscriptionError> {
     match info.validate() {
         Ok(_) => println!("Request for subscribe passed validation"),
-        Err(errors) => {return HttpResponse::BadRequest().body(errors.to_string());}
+        Err(errors) => {return Err(SubscriptionError::from(errors));}
     }
     let mut subscriptions = app_state.subscriptions.write().expect("RwLock poisoned");
     let email = &info.email;
@@ -74,7 +136,7 @@ pub async fn subscribe(
     if let Some(subscription) = subscriptions.iter_mut().find(|s| s.email == *email) {
         // Subscription already exists
         match subscription.status.as_str() {
-            "confirmed" => {return HttpResponse::BadRequest().json(serde_json::json!({ "message": "Subscription with email {} is already confirmed" }));},
+            "confirmed" => {return Err(SubscriptionError::from(serde_json::json!({ "message": format!("Subscription with email {} is already confirmed", email) })));},
             _ =>  {new_id = Some(subscription.id)}, // If email not confirmed resend the confimation link
         }
     } else {
@@ -90,14 +152,10 @@ pub async fn subscribe(
         subscriptions.push(subscription);
     }
 
-    if send_confirmation_email(&email_client, info.email.clone(), new_id.unwrap(), &base_url.0)
-        .await
-        .is_err()
-    {
-        return HttpResponse::InternalServerError().finish();
-    }
+    let _response = send_confirmation_email(&email_client, info.email.clone(), new_id.unwrap(), &base_url.0)
+        .await?;
 
-    HttpResponse::Ok().json(serde_json::json!({ "id": new_id.unwrap() }))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "id": new_id.unwrap() })))
 }
 
 #[derive(serde::Deserialize)]
