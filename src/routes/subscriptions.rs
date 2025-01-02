@@ -17,7 +17,7 @@ pub enum SubscriptionError {
     #[error("Validation error(s): {0}")]
     ValidationError(String),
     #[error("Subscription already exists: {0}")]
-    AlreadyExists( serde_json::Value),
+    AlreadyExists(serde_json::Value),
     #[error("Failed to send email")]
     SendEmailError(#[from]reqwest::Error),
 }
