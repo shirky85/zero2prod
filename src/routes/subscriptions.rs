@@ -12,31 +12,14 @@ static NAME_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[\sa-zA-Z0-9_]+$").unwrap()
 });
 // TODO: should we export this to another file?
+#[derive(thiserror::Error)]
 pub enum SubscriptionError {
+    #[error("Validation error(s): {0}")]
     ValidationError(String),
-    AlreadyExists(serde_json::Value),
-    SendEmailError(reqwest::Error),
-}
-
-impl From<validator::ValidationErrors> for SubscriptionError {
-    fn from(err: validator::ValidationErrors) -> Self {
-        Self::ValidationError(err.to_string())
-    }
-    
-}
-
-impl From<reqwest::Error> for SubscriptionError {
-    fn from(err: reqwest::Error) -> Self {
-        Self::SendEmailError(err)
-    }
-    
-}
-
-impl From<serde_json::Value> for SubscriptionError {
-    fn from(err: serde_json::Value) -> Self {
-        Self::AlreadyExists(err)
-    }
-    
+    #[error("Subscription already exists: {0}")]
+    AlreadyExists( serde_json::Value),
+    #[error("Failed to send email")]
+    SendEmailError(#[from]reqwest::Error),
 }
 
 // TODO: Ask AI to explain this syntax later or simplify it
@@ -53,32 +36,6 @@ fn error_chain_fmt(
     Ok(())
 }
 
-impl std::fmt::Display for SubscriptionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            SubscriptionError::ValidationError(errors) => {
-                write!(f, "Validation error(s): {}", errors)
-            }
-            SubscriptionError::AlreadyExists(message) => {
-                write!(f, "Subscription already exists: {}", message)
-            }
-            SubscriptionError::SendEmailError(_error) => {
-                write!(f, "Failed to send email")
-            }
-        }
-    }
-}
-
-impl std::error::Error for SubscriptionError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-    // &str does not implement `Error` - we consider it the root cause
-            SubscriptionError::ValidationError(_) => None,
-            SubscriptionError::AlreadyExists(_) => None,
-            SubscriptionError::SendEmailError(e) => Some(e),
-        }
-    }
-}
 
 impl std::fmt::Debug for SubscriptionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -155,7 +112,7 @@ pub async fn subscribe(
 ) -> Result<HttpResponse, SubscriptionError> {
     match info.validate() {
         Ok(_) => println!("Request for subscribe passed validation"),
-        Err(errors) => {return Err(SubscriptionError::from(errors));}
+        Err(errors) => {return Err(SubscriptionError::ValidationError(errors.to_string()));}
     }
     let mut subscriptions = app_state.subscriptions.write().expect("RwLock poisoned");
     let email = &info.email;
@@ -164,7 +121,7 @@ pub async fn subscribe(
     if let Some(subscription) = subscriptions.iter_mut().find(|s| s.email == *email) {
         // Subscription already exists
         match subscription.status.as_str() {
-            "confirmed" => {return Err(SubscriptionError::from(serde_json::json!({ "message": format!("Subscription with email {} is already confirmed", email) })));},
+            "confirmed" => {return Err(SubscriptionError::AlreadyExists(serde_json::json!({ "message": format!("Subscription with email {} is already confirmed", email) })));},
             _ =>  {new_id = Some(subscription.id)}, // If email not confirmed resend the confimation link
         }
     } else {
