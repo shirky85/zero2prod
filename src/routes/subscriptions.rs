@@ -11,8 +11,7 @@ use crate::{email_client::EmailClient, in_memory::{AppState, Subscription}, star
 static NAME_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[\sa-zA-Z0-9_]+$").unwrap()
 });
-
-#[derive(Debug)]
+// TODO: should we export this to another file?
 pub enum SubscriptionError {
     ValidationError(String),
     AlreadyExists(serde_json::Value),
@@ -40,7 +39,19 @@ impl From<serde_json::Value> for SubscriptionError {
     
 }
 
-
+// TODO: Ask AI to explain this syntax later or simplify it
+fn error_chain_fmt(
+    e: &impl std::error::Error,
+    f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+    writeln!(f, "{}\n", e)?;
+    let mut current = e.source();
+    while let Some(cause) = current {
+        writeln!(f, "Caused by:\n\t{}", cause)?;
+        current = cause.source();
+    }
+    Ok(())
+}
 
 impl std::fmt::Display for SubscriptionError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -55,6 +66,23 @@ impl std::fmt::Display for SubscriptionError {
                 write!(f, "Failed to send email")
             }
         }
+    }
+}
+
+impl std::error::Error for SubscriptionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+    // &str does not implement `Error` - we consider it the root cause
+            SubscriptionError::ValidationError(_) => None,
+            SubscriptionError::AlreadyExists(_) => None,
+            SubscriptionError::SendEmailError(e) => Some(e),
+        }
+    }
+}
+
+impl std::fmt::Debug for SubscriptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        error_chain_fmt(self, f)
     }
 }
 
