@@ -51,25 +51,26 @@ impl EmailClient {
         skip(self, html_content, text_content),
         fields(
         %html_content,
-        %recipient,
+        ?recipients,
         %subject
         )
     )]
     pub async fn send_email(
         &self,
-        recipient: String,
+        recipients: Vec<String>,
         subject: &str,
         html_content: &str,
         text_content: &str
     ) -> Result<(), reqwest::Error> {
         let url = format!("{}v3/send", self.base_url);
+        let recipients: Vec<Recipient> = recipients.into_iter().map(|email| Recipient { email }).collect();
         let request = MailjetRequest {
             from_email: self.sender.as_ref(),
             from_name: "Newsletter Admin".as_ref(),
             subject: subject.as_ref(),
             text_part: text_content.as_ref(),
             html_part: html_content.as_ref(),
-            recipients: vec![Recipient{email: recipient}],
+            recipients,
         };
         self.http_client
             .post(&url)
@@ -126,7 +127,7 @@ mod tests {
             .await;
         // Act
         let _ = email_client(mock_server.uri())
-        .send_email(email(), &subject(), &content(), &content())
+        .send_email(vec![email()], &subject(), &content(), &content())
         .await;
 
         //Assert
@@ -145,7 +146,7 @@ mod tests {
             .await;
         // Act
         let outcome = email_client(mock_server.uri())
-            .send_email(email(), &subject(), &content(), &content())
+            .send_email(vec![email()], &subject(), &content(), &content())
             .await;
         // Assert
         assert_err!(outcome);
@@ -166,7 +167,7 @@ mod tests {
             .await;
         // Act
         let outcome = email_client(mock_server.uri())
-            .send_email(email(), &subject(), &content(), &content())
+            .send_email(vec![email()], &subject(), &content(), &content())
             .await;
         // Assert
         assert_err!(outcome);

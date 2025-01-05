@@ -78,7 +78,7 @@ async fn send_confirmation_email(
     let confirmation_link = format!("{}/subscriptions/confirm?subscription_token={}", base_url, subscription_id);
     email_client
         .send_email(
-            recepient,
+            vec![recepient],
             "Welcome!",
             &format!("Welcome to our newsletter!<br />\
                             Click <a href=\"{}\">here</a> to confirm your subscription.", confirmation_link),

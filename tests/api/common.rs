@@ -97,17 +97,37 @@ impl TestApp {
         }
     }
 
-    pub async fn create_uncorfirmed_subscription(&self) {
+    pub async fn create_unconfirmed_subscription(&self) -> ConfirmationLinks{
         let _mock_send_confirmation = Mock::given(path("/v3/send"))
             .and(method("POST"))
             .respond_with(ResponseTemplate::new(200))
             .named("Send confirmation email")
-            .mount_as_scoped(&self.mock_email_server)
+            .mount_as_scoped(&self.mock_email_server) // this is a mockGuard object - 
+            //it will mock according to the specification only inside the scope it was declared in
             .await;
 
         let _unconfirmed_subscription_response = self.post_subscriptions(
             &SubscriptionRequest::new("le guin".to_string(), 
-            "ursula_le_guin@gmail.com".to_string())).await;
+            "ursula_le_guin@gmail.com".to_string())).await.error_for_status().unwrap();
+
+        //catch the request that was sent to the mock email server for the confirmation email
+        let email_request = &self
+        .mock_email_server
+        .received_requests()
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+        
+        self.get_confirmation_links(&email_request)
+            
+    }
+
+    pub async fn create_confirmed_subscription(&self) {
+        let confirmation_link = self.create_unconfirmed_subscription().await;
+
+        // Now we send the confirmation request
+        let _response = reqwest::get(confirmation_link.html).await.unwrap();
     }
 }
 
