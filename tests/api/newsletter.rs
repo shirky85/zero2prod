@@ -143,3 +143,70 @@ async fn newsletters_returns_a_502_on_send_email_error(){
     // Assert
     assert_eq!(response.status().as_u16(), 502);
 }
+#[tokio::test]
+async fn request_with_no_authorization_is_rejected() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = serde_json::json!({
+        "title": "Newsletter title",
+        "content": {
+            "text": "Newsletter body as plain text",
+            "html": "<p>Newsletter body as HTML</p>",
+        }
+    });
+
+    let _mock_send_newsletter = Mock::given(path("/v3/send"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&app.mock_email_server)
+        .await;
+
+
+    // Act
+    let response = reqwest::Client::new()
+        .post(&format!("{}/newsletters", &app.address))
+        .json(&body)
+        .send()
+        .await
+        .expect("Failed to execute request."); 
+
+    // Assert
+    assert_eq!(response.status().as_u16(), 401 );
+    assert_eq!(r#"Basic realm="publish""#, response.headers()["WWW-Authenticate"]);
+}
+
+#[tokio::test]
+async fn request_with_bearer_authorization_is_rejected() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = serde_json::json!({
+        "title": "Newsletter title",
+        "content": {
+            "text": "Newsletter body as plain text",
+            "html": "<p>Newsletter body as HTML</p>",
+        }
+    });
+
+    let _mock_send_newsletter = Mock::given(path("/v3/send"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&app.mock_email_server)
+        .await;
+
+
+    // Act
+    let response = reqwest::Client::new()
+        .post(&format!("{}/newsletters", &app.address))
+        .header("Authorization", "Bearer your_token_here")
+        .json(&body)
+        .send()
+        .await
+        .expect("Failed to execute request."); 
+
+    // Assert
+    assert_eq!(response.status().as_u16(), 400 );
+    assert_eq!(r#"Basic realm="publish""#, response.headers()["WWW-Authenticate"]);
+}
+

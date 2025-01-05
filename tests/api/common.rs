@@ -1,4 +1,5 @@
 use serde_json::Value;
+use uuid::Uuid;
 use zero2prod::routes::SubscriptionRequest;
 use zero2prod::startup::Application;
 use wiremock::{matchers::{method, path}, Mock, MockServer, ResponseTemplate};
@@ -136,6 +137,7 @@ impl TestApp {
         ) -> reqwest::Response {
         reqwest::Client::new()
             .post(&format!("{}/newsletters", &self.address))
+            .basic_auth("admin", Some("admin"))
             .json(&body)
             .send()
             .await

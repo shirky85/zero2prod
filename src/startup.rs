@@ -3,7 +3,8 @@ use actix_web::{
     dev::Server, web::{self, Data}, App, HttpServer 
 };
 use tracing_actix_web::TracingLogger;
-use crate::{email_client::EmailClient, routes::{get_subscription, publish_newsletter, subscription_confirm}};
+use sha3::Digest;
+use crate::{email_client::EmailClient, in_memory::Sender, routes::{get_subscription, publish_newsletter, subscription_confirm}};
 use crate::configuration::Properties;
 use crate::{in_memory::AppState, routes::{greet, health_check, subscribe}};
 
@@ -18,6 +19,11 @@ impl Application {
     // `Application`.
     pub async fn build(configuration: Properties) -> Result<Self, std::io::Error> {
         let app_state: AppState = AppState::new();
+        // TODO: Remove this hardcoded sender after writing an endpoint to register one
+        app_state.senders.write().unwrap().push(Sender{
+            username: "admin".to_string(),
+            pwd: format!("{:x}",sha3::Sha3_256::digest("admin".as_bytes())),
+        });
         let data_store_shared = web::Data::new(app_state);
 
         let sender_email = configuration

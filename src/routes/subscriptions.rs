@@ -138,13 +138,6 @@ pub struct SubscriptionParameters {
     subscription_id: String
 }
 
-#[tracing::instrument(
-    name = "Finding a subscriber",
-    skip(id, app_state),
-    fields(
-    %id.subscription_id
-    )
-)]
 pub async fn get_subscription(
     app_state: web::Data<AppState>,
     id: web::Query<SubscriptionParameters>

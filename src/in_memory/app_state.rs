@@ -7,12 +7,18 @@ pub struct Subscription{
     pub id: i32,
     pub username: String,
     pub email: String,
-    pub status: String
+    pub status: String,
+}
+
+pub struct Sender{
+    pub username: String,
+    pub pwd: String,
 }
 
 #[derive(Clone)]
 pub struct AppState{
     pub subscriptions: Arc<RwLock<Vec<Subscription>>>,
+    pub senders: Arc<RwLock<Vec<Sender>>>,
     next_id: Arc<Mutex<i32>>,
 }
 
@@ -22,6 +28,7 @@ impl AppState {
         Self {
             next_id: Arc::new(Mutex::new(max_id + 1)),
             subscriptions: Arc::new(RwLock::new(Vec::new())),
+            senders: Arc::new(RwLock::new(Vec::new())),
         }
     }
     pub fn get_id(&self) -> i32 {
