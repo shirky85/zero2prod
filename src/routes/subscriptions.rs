@@ -8,6 +8,8 @@ use regex::Regex;
 
 use crate::{email_client::EmailClient, in_memory::{AppState, Subscription}, startup::ApplicationBaseUrl};
 
+use super::error_chain_fmt;
+
 static NAME_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[\sa-zA-Z0-9_]+$").unwrap()
 });
@@ -22,19 +24,7 @@ pub enum SubscriptionError {
     SendEmailError(#[from]reqwest::Error),
 }
 
-// TODO: Ask AI to explain this syntax later or simplify it
-fn error_chain_fmt(
-    e: &impl std::error::Error,
-    f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-    writeln!(f, "{}\n", e)?;
-    let mut current = e.source();
-    while let Some(cause) = current {
-        writeln!(f, "Caused by:\n\t{}", cause)?;
-        current = cause.source();
-    }
-    Ok(())
-}
+
 
 
 impl std::fmt::Debug for SubscriptionError {
@@ -148,6 +138,13 @@ pub struct SubscriptionParameters {
     subscription_id: String
 }
 
+#[tracing::instrument(
+    name = "Finding a subscriber",
+    skip(id, app_state),
+    fields(
+    %id.subscription_id
+    )
+)]
 pub async fn get_subscription(
     app_state: web::Data<AppState>,
     id: web::Query<SubscriptionParameters>

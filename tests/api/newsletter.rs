@@ -24,12 +24,7 @@ async fn newsletters_are_not_sent_to_unconfirmed_subscribers() {
         .await;
 
     // Act
-    let response = reqwest::Client::new()
-        .post(&format!("{}/newsletters", app.address))
-        .json(&body)
-        .send()
-        .await
-        .expect("Failed to execute request.");
+    let response = app.post_newsletters(body).await;
 
     // Assert
     assert_eq!(response.status().as_u16(), 200);
@@ -57,13 +52,7 @@ async fn newletter_is_sent_to_confirmed_subscribers(){
         .mount(&app.mock_email_server)
         .await;
 
-    let response = reqwest::Client::new()
-        .post(&format!("{}/newsletters", app.address))
-        .json(&body)
-        .send()
-        .await
-        .expect("Failed to execute request.");
-
+    let response = app.post_newsletters(body).await;
     // Assert
     assert_eq!(response.status().as_u16(), 200);
     // Mock verifies on Drop that we haven't sent the newsletter email
@@ -73,21 +62,84 @@ async fn newletter_is_sent_to_confirmed_subscribers(){
 async fn newsletters_returns_a_400_for_invalid_data(){
     // Arrange
     let app = spawn_app().await;
+    let test_cases = vec![
+        (serde_json::json!({
+            "content": {
+                "text": "Newsletter body as plain text",
+                "html": "<p>Newsletter body as HTML</p>",
+            }
+        }), "missing the title"),
+
+        (serde_json::json!({
+            "title": "some title"
+        }), "missing the content"),
+
+        (serde_json::json!({
+            "title": "some title",
+            "content": {
+                "html": "<p>Newsletter body as HTML</p>",
+            }
+        }), "missing the text in content"),
+
+        (serde_json::json!({
+            "title": "some title",
+            "content": {
+                "text": "short text",
+            }
+        }), "missing the html in content"),
+
+        (serde_json::json!({
+            "title": "this is a very long title, really too long, what are you doing, are you crazy?",
+            "content": {
+                "text": "Newsletter body as plain text",
+                "html": "<p>Newsletter body as HTML</p>",
+            }
+        }), "title is too long"),
+
+        (serde_json::json!({
+            "title": "short title",
+            "content": {
+                "text": "bla",
+                "html": "<p>Newsletter body as HTML</p>",
+            }
+        }), "content is too short"),
+    ];
+    for (invalid_body, error_message) in test_cases {
+        // Act
+        
+        let response = app.post_newsletters(invalid_body).await;
+        assert_eq!(
+            400,
+            response.status().as_u16(),
+            // Additional customised error message on test failure
+            "The API did not fail with 400 Bad Request when the payload was {}.",
+            error_message
+        );
+    }
+}
+
+#[tokio::test]
+async fn newsletters_returns_a_502_on_send_email_error(){
+    // Arrange
+    let app = spawn_app().await;
     let body = serde_json::json!({
+        "title": "Newsletter title",
         "content": {
             "text": "Newsletter body as plain text",
             "html": "<p>Newsletter body as HTML</p>",
         }
     });
     
-    // Act
-    let response = reqwest::Client::new()
-        .post(&format!("{}/newsletters", app.address))
-        .json(&body)
-        .send()
-        .await
-        .expect("Failed to execute request.");
+    app.create_confirmed_subscription().await;
 
+    let _mock_send_newsletter = Mock::given(path("/v3/send"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(1)
+        .mount(&app.mock_email_server)
+        .await;
+
+    let response = app.post_newsletters(body).await;
     // Assert
-    assert_eq!(response.status().as_u16(), 400);
+    assert_eq!(response.status().as_u16(), 502);
 }
