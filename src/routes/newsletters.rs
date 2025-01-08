@@ -121,6 +121,35 @@ fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, PublishError
     })
 }
 
+// #[tracing::instrument(
+//     name = "Validating sender credentials",
+//     skip(cred, app_state),
+// )]
+// async fn validate_sender_credentials(username: &str, password: &SecretString, app_state: &AppState) -> Result<(), PublishError> {
+//     let senders = app_state.senders.read().expect("RwLock poisoned");
+//     let sender = senders
+//         .iter().find(|s| s.username == *username);
+//     let hashed_value_of_password = format!("{:x}", sha3::Sha3_256::digest(password.expose_secret().as_bytes()));
+//     if sender.unwrap().pwd != hashed_value_of_password {
+//         return Err(PublishError::WrongSenderPasswordError);
+//     }
+//     Ok(())
+// }
+#[tracing::instrument(
+    name = "Validating sender credentials",
+    skip(username, password, app_state),
+)]
+async fn validate_sender_credentials(username: &str, password: &SecretString, app_state: &AppState) -> Result<(), PublishError> {
+    let senders = app_state.senders.read().expect("RwLock poisoned");
+    let sender = senders
+        .iter().find(|s| s.username == *username);
+    let hashed_value_of_password = format!("{:x}", sha3::Sha3_256::digest(password.expose_secret().as_bytes()));
+    if sender.unwrap().pwd != hashed_value_of_password {
+        return Err(PublishError::WrongSenderPasswordError);
+    }
+    Ok(())
+}
+
 #[tracing::instrument(
     name = "Publishing a newsletter",
     skip(req, email_client, app_state),
@@ -138,19 +167,23 @@ pub async fn publish_newsletter(
             tracing::warn!("Failed to authenticate request: {:?}", err);
             err
         })?;
-    let senders = app_state.senders.read().expect("RwLock poisoned");
-    let sender = senders
-        .iter().find(|s| s.username == _credentials.username);
-    let hashed_value_of_password = format!("{:x}", sha3::Sha3_256::digest(_credentials.password.expose_secret().as_bytes()));
-    if sender.unwrap().pwd != hashed_value_of_password {
-        return Err(PublishError::WrongSenderPasswordError);
-    }
+    let app_state_clone = app_state.clone();
+    let validation_handle = tokio::spawn(async move {
+        validate_sender_credentials(&_credentials.username, &_credentials.password, &app_state_clone).await
+    });
+
+    
     match req.validate() {
         Ok(_) => match req.content.validate(){
             Ok(_) => println!("Request for publish passed validation"),
             Err(errors) => {return Err(PublishError::ValidationError(errors.to_string()));}
         },
         Err(errors) => {return Err(PublishError::ValidationError(errors.to_string()));}
+    }
+
+    match validation_handle.await {
+        Ok(result) => result?,
+        Err(_) => return Err(PublishError::UnauthorizedSenderUsernameError),
     }
 
     let subscriptions = app_state.subscriptions.read().expect("RwLock poisoned");
